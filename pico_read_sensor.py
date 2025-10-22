@@ -1,4 +1,6 @@
-from machine import SoftI2C, Pin
+from machine import I2C, Pin
+import time
+from ssd1306 import SSD1306_I2C
 
 
 def extract_temperature(data: bytearray) -> float:
@@ -21,21 +23,32 @@ if __name__ == "__main__":
     device_id = 0x38
     sda_pin = Pin(0)
     scl_pin = Pin(1)
-    i2c = SoftI2C(sda=sda_pin, scl=scl_pin, freq=90000)
+    sensor_i2c = I2C(0, sda=sda_pin, scl=scl_pin, freq=90000)
 
     status = bytearray(1)
-    i2c.writeto(device_id, bytes([0x71]))
-    i2c.readfrom_into(device_id, status)
+    sensor_i2c.writeto(device_id, bytes([0x71]))
+    sensor_i2c.readfrom_into(device_id, status)
 
     if status[0] == 0x18:
         print("Ready to read")
 
-    i2c.writeto(device_id, bytes([0xAC, 0x33, 0x00]))
+    sensor_i2c.writeto(device_id, bytes([0xAC, 0x33, 0x00]))
 
     raw_reading = bytearray(8)
-    i2c.readfrom_into(device_id, raw_reading)
+    sensor_i2c.readfrom_into(device_id, raw_reading)
 
     t = extract_temperature(raw_reading)
     h = extract_humidity(raw_reading)
 
-    print(f"Temp: {t} Humidity: {h}")
+    display_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
+
+    time.sleep(1)
+
+    display = SSD1306_I2C(128, 32, display_i2c)
+
+    display.fill(0)
+
+    display.text(f"Temp {t}", 0, 0)
+    display.text(f"Humidity {h}%", 0, 12)
+
+    display.show()
