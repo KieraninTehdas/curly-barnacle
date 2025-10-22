@@ -10,6 +10,11 @@ class RoomConditionSensor:
         self.device_id = 0x38
         self.i2c: I2C = I2C(i2c_interface, sda=sda_pin, scl=scl_pin, freq=90000)
         time.sleep(1)  # Delay to avoid I2C problems
+        self.i2c.writeto(self.device_id, bytes([0x71]))
+        status_byte = self.i2c.readfrom(self.device_id, 1)[0]
+
+        if status_byte != 0x18:
+            print("Sensor may not have initialised :(")
 
     def get_current_conditions(self):
         self.i2c.writeto(self.device_id, bytes([0xAC, 0x33, 0x00]))
@@ -53,10 +58,20 @@ class Display:
 
         self.display.show()
 
+    def clear_display(self):
+        self.display.fill(0)
+        self.display.show()
+
 
 if __name__ == "__main__":
     sensor = RoomConditionSensor()
     display = Display()
+    button = Pin(15, Pin.IN, Pin.PULL_DOWN)
 
-    t, h = sensor.get_current_conditions()
-    display.display_conditions(t, h)
+    while True:
+        if button.value() == 1:
+            t, h = sensor.get_current_conditions()
+            display.display_conditions(t, h)
+            time.sleep(10)
+            display.clear_display()
+        time.sleep(0.2)
