@@ -3,52 +3,60 @@ import time
 from ssd1306 import SSD1306_I2C
 
 
-def extract_temperature(data: bytearray) -> float:
-    raw_temperature = ((data[3] & 0xF) << 16) + (data[4] << 8) + data[5]
+class RoomConditionSensor:
+    def __init__(
+        self, i2c_interface: int = 0, sda_pin: Pin = Pin(0), scl_pin: Pin = Pin(1)
+    ):
+        self.device_id = 0x38
+        self.i2c: I2C = I2C(i2c_interface, sda=sda_pin, scl=scl_pin, freq=90000)
+        time.sleep(1)  # Delay to avoid I2C problems
 
-    calculated_temperature = 200 * (float(raw_temperature) / (2**20)) - 50
+    def get_current_conditions(self):
+        self.i2c.writeto(self.device_id, bytes([0xAC, 0x33, 0x00]))
 
-    return round(calculated_temperature, 1)
+        raw_reading = bytearray(8)
+        self.i2c.readfrom_into(self.device_id, raw_reading)
+
+        t = self._extract_temperature(raw_reading)
+        h = self._extract_humidity(raw_reading)
+
+        return (t, h)
+
+    def _extract_temperature(self, data: bytearray) -> float:
+        raw_temperature = ((data[3] & 0xF) << 16) + (data[4] << 8) + data[5]
+
+        calculated_temperature = 200 * (float(raw_temperature) / (2**20)) - 50
+
+        return round(calculated_temperature, 1)
+
+    def _extract_humidity(self, data: bytearray) -> float:
+        raw_humidity = (data[1] << 12) + (data[2] << 4) + ((data[3] & 0xF0) >> 4)
+
+        calculated_humidity = 100 * (float(raw_humidity) / (2**20))
+
+        return round(calculated_humidity, 1)
 
 
-def extract_humidity(data: bytearray) -> float:
-    raw_humidity = (data[1] << 12) + (data[2] << 4) + ((data[3] & 0xF0) >> 4)
+class Display:
+    def __init__(
+        self, i2c_interface: int = 1, sda_pin: Pin = Pin(10), scl_pin: Pin = Pin(11)
+    ):
+        display_i2c = I2C(i2c_interface, sda=sda_pin, scl=scl_pin, freq=400000)
+        time.sleep(1)
+        self.display = SSD1306_I2C(128, 32, display_i2c)
 
-    calculated_humidity = 100 * (float(raw_humidity) / (2**20))
+    def display_conditions(self, temperature, humidity):
+        self.display.fill(0)
 
-    return round(calculated_humidity, 1)
+        self.display.text(f"Humidity {humidity}%", 0, 12)
+        self.display.text(f"Temp {temperature} deg C", 0, 0)
+
+        self.display.show()
 
 
 if __name__ == "__main__":
-    device_id = 0x38
-    sda_pin = Pin(0)
-    scl_pin = Pin(1)
-    sensor_i2c = I2C(0, sda=sda_pin, scl=scl_pin, freq=90000)
+    sensor = RoomConditionSensor()
+    display = Display()
 
-    status = bytearray(1)
-    sensor_i2c.writeto(device_id, bytes([0x71]))
-    sensor_i2c.readfrom_into(device_id, status)
-
-    if status[0] == 0x18:
-        print("Ready to read")
-
-    sensor_i2c.writeto(device_id, bytes([0xAC, 0x33, 0x00]))
-
-    raw_reading = bytearray(8)
-    sensor_i2c.readfrom_into(device_id, raw_reading)
-
-    t = extract_temperature(raw_reading)
-    h = extract_humidity(raw_reading)
-
-    display_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
-
-    time.sleep(1)
-
-    display = SSD1306_I2C(128, 32, display_i2c)
-
-    display.fill(0)
-
-    display.text(f"Temp {t}", 0, 0)
-    display.text(f"Humidity {h}%", 0, 12)
-
-    display.show()
+    t, h = sensor.get_current_conditions()
+    display.display_conditions(t, h)
