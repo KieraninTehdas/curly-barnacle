@@ -9,15 +9,20 @@ class RoomConditionSensor:
     ):
         self.device_id = 0x38
         self.i2c: I2C = I2C(i2c_interface, sda=sda_pin, scl=scl_pin, freq=90000)
-        time.sleep(1)  # Delay to avoid I2C problems
         self.i2c.writeto(self.device_id, bytes([0x71]))
         status_byte = self.i2c.readfrom(self.device_id, 1)[0]
 
         if status_byte != 0x18:
             print("Sensor may not have initialised :(")
 
+        # Sensor needs 10ms before sending any reading commands
+        time.sleep(0.01)
+
     def get_current_conditions(self):
         self.i2c.writeto(self.device_id, bytes([0xAC, 0x33, 0x00]))
+
+        # Wait at least 80ms for measurement to complete. Make it 200 for safety.
+        time.sleep(0.2)
 
         raw_reading = bytearray(8)
         self.i2c.readfrom_into(self.device_id, raw_reading)
@@ -71,6 +76,7 @@ if __name__ == "__main__":
     while True:
         if button.value() == 1:
             t, h = sensor.get_current_conditions()
+
             display.display_conditions(t, h)
             time.sleep(10)
             display.clear_display()
